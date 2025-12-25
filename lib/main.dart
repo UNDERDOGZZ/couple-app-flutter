@@ -45,6 +45,18 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     _controller.dispose();
     super.dispose();
   }
+}
+
+class _FloatingHeart extends StatelessWidget {
+  const _FloatingHeart({
+    required this.size,
+    required this.opacity,
+    required this.offset,
+  });
+
+  final double size;
+  final double opacity;
+  final Offset offset;
 
   @override
   Widget build(BuildContext context) {
