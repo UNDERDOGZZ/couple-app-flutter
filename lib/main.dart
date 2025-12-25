@@ -1,16 +1,29 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-const String _supabaseUrl =
-String.fromEnvironment('SUPABASE_URL', defaultValue: '');
-
-const String _supabaseAnonKey =
-String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '');
-
-final bool _hasSupabaseConfig =
+const String _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+const String _supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+const bool _hasSupabaseConfig =
     _supabaseUrl.isNotEmpty && _supabaseAnonKey.isNotEmpty;
+
+/// Supabase data model (tables) for pareja:
+/// - couples
+///   - id uuid primary key default gen_random_uuid()
+///   - user_a uuid references auth.users(id) not null
+///   - user_b uuid references auth.users(id) not null
+///   - created_at timestamp with time zone default now()
+///   - unique index on user_a
+///   - unique index on user_b
+/// - pairing_codes
+///   - code text primary key
+///   - owner_id uuid references auth.users(id) not null
+///   - used_by uuid references auth.users(id)
+///   - used boolean default false
+///   - expires_at timestamp with time zone not null
+///   - created_at timestamp with time zone default now()
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -707,8 +720,252 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 }
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final _pairingController = TextEditingController();
+  bool _isLoading = true;
+  bool _isSubmitting = false;
+  String? _pairingCode;
+  DateTime? _pairingExpiresAt;
+  bool _isLinked = false;
+  String? _partnerId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPairingStatus();
+  }
+
+  @override
+  void dispose() {
+    _pairingController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadPairingStatus() async {
+    if (!_hasSupabaseConfig) {
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+    });
+    try {
+      final client = Supabase.instance.client;
+      final user = client.auth.currentUser;
+      if (user == null) {
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final couple = await client
+          .from('couples')
+          .select('id, user_a, user_b')
+          .or('user_a.eq.${user.id},user_b.eq.${user.id}')
+          .maybeSingle();
+
+      if (couple != null) {
+        final userA = couple['user_a'] as String;
+        final userB = couple['user_b'] as String;
+        setState(() {
+          _isLinked = true;
+          _partnerId = userA == user.id ? userB : userA;
+          _isLoading = false;
+        });
+        return;
+      }
+      setState(() {
+        _isLinked = false;
+        _partnerId = null;
+      });
+
+      final nowIso = DateTime.now().toIso8601String();
+      final activeCode = await client
+          .from('pairing_codes')
+          .select('code, expires_at')
+          .eq('owner_id', user.id)
+          .eq('used', false)
+          .gt('expires_at', nowIso)
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+
+      if (activeCode != null) {
+        setState(() {
+          _pairingCode = activeCode['code'] as String;
+          _pairingExpiresAt =
+              DateTime.tryParse(activeCode['expires_at'] as String);
+        });
+      } else {
+        setState(() {
+          _pairingCode = null;
+          _pairingExpiresAt = null;
+        });
+      }
+    } on PostgrestException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No pudimos cargar tu estado.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  String _createCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    final rand = Random();
+    return List.generate(6, (_) => chars[rand.nextInt(chars.length)]).join();
+  }
+
+  Future<void> _generatePairingCode() async {
+    if (_isLinked) return;
+    final now = DateTime.now();
+    if (_pairingExpiresAt != null && _pairingExpiresAt!.isAfter(now)) {
+      return;
+    }
+    setState(() {
+      _isSubmitting = true;
+    });
+    try {
+      final client = Supabase.instance.client;
+      final user = client.auth.currentUser;
+      if (user == null) return;
+
+      final expiresAt = now.add(const Duration(minutes: 15));
+      String? code;
+      for (var i = 0; i < 3; i++) {
+        final candidate = _createCode();
+        try {
+          await client.from('pairing_codes').insert({
+            'code': candidate,
+            'owner_id': user.id,
+            'expires_at': expiresAt.toIso8601String(),
+            'used': false,
+          });
+          code = candidate;
+          break;
+        } on PostgrestException catch (_) {
+          continue;
+        }
+      }
+      if (code == null) {
+        throw Exception('No se pudo generar un código único.');
+      }
+      setState(() {
+        _pairingCode = code;
+        _pairingExpiresAt = expiresAt;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No pudimos generar el código.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
+  Future<bool> _hasExistingCouple(String userId) async {
+    final client = Supabase.instance.client;
+    final existing = await client
+        .from('couples')
+        .select('id')
+        .or('user_a.eq.$userId,user_b.eq.$userId')
+        .maybeSingle();
+    return existing != null;
+  }
+
+  Future<void> _linkWithCode() async {
+    final input = _pairingController.text.trim().toUpperCase();
+    if (input.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresa el código de tu pareja.')),
+      );
+      return;
+    }
+    setState(() {
+      _isSubmitting = true;
+    });
+    try {
+      final client = Supabase.instance.client;
+      final user = client.auth.currentUser;
+      if (user == null) return;
+
+      if (await _hasExistingCouple(user.id)) {
+        throw Exception('Ya tienes una pareja vinculada.');
+      }
+
+      final codeRow = await client
+          .from('pairing_codes')
+          .select('code, owner_id, expires_at')
+          .eq('code', input)
+          .eq('used', false)
+          .gt('expires_at', DateTime.now().toIso8601String())
+          .maybeSingle();
+
+      if (codeRow == null) {
+        throw Exception('El código no es válido o ya expiró.');
+      }
+
+      final ownerId = codeRow['owner_id'] as String;
+      if (ownerId == user.id) {
+        throw Exception('Ese código es tuyo. Comparte tu código con tu pareja.');
+      }
+
+      if (await _hasExistingCouple(ownerId)) {
+        throw Exception('Tu pareja ya está vinculada con alguien más.');
+      }
+
+      await client.from('couples').insert({
+        'user_a': ownerId,
+        'user_b': user.id,
+      });
+
+      await client.from('pairing_codes').update({
+        'used': true,
+        'used_by': user.id,
+      }).eq('code', input);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('¡Pareja vinculada con éxito!')),
+      );
+      _pairingController.clear();
+      await _loadPairingStatus();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString().replaceAll('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -750,6 +1007,25 @@ class HomeScreen extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(height: 20),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            child: _isLoading
+                ? const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: CircularProgressIndicator(),
+                  )
+                : _isLinked
+                    ? _LinkedPartnerCard(partnerId: _partnerId)
+                    : _PairingCard(
+                        pairingCode: _pairingCode,
+                        expiresAt: _pairingExpiresAt,
+                        isSubmitting: _isSubmitting,
+                        controller: _pairingController,
+                        onGenerate: _generatePairingCode,
+                        onLink: _linkWithCode,
+                      ),
+          ),
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
@@ -770,6 +1046,208 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
               child: const Text('Cerrar sesión'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LinkedPartnerCard extends StatelessWidget {
+  const _LinkedPartnerCard({this.partnerId});
+
+  final String? partnerId;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          const Text(
+            'Ya están conectados',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF9F1239),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            partnerId == null
+                ? 'Tu pareja está sincronizada con tu espacio.'
+                : 'Tu pareja está sincronizada.\nCódigo interno: $partnerId',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Color(0xFF6B7280)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PairingCard extends StatelessWidget {
+  const _PairingCard({
+    required this.pairingCode,
+    required this.expiresAt,
+    required this.isSubmitting,
+    required this.controller,
+    required this.onGenerate,
+    required this.onLink,
+  });
+
+  final String? pairingCode;
+  final DateTime? expiresAt;
+  final bool isSubmitting;
+  final TextEditingController controller;
+  final VoidCallback onGenerate;
+  final VoidCallback onLink;
+
+  String _formatExpiry(DateTime? time) {
+    if (time == null) return '';
+    final minutes = time.difference(DateTime.now()).inMinutes;
+    if (minutes <= 0) return 'expirado';
+    return 'expira en ${minutes} min';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          const Text(
+            'Vincula a tu pareja',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF9F1239),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Comparte un código temporal o ingresa el de tu pareja.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Color(0xFF6B7280)),
+          ),
+          const SizedBox(height: 16),
+          if (pairingCode != null)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF1F5),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFFBCFE8)),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    pairingCode!,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 4,
+                      color: Color(0xFF9F1239),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _formatExpiry(expiresAt),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF9CA3AF),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: isSubmitting ? null : onGenerate,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFE11D48),
+                side: const BorderSide(color: Color(0xFFE11D48)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              child: const Text('Generar código'),
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: controller,
+            textCapitalization: TextCapitalization.characters,
+            decoration: InputDecoration(
+              labelText: 'Código de pareja',
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: isSubmitting ? null : onLink,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFE11D48),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                child: isSubmitting
+                    ? const SizedBox(
+                        key: ValueKey('loading'),
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Vincular', key: ValueKey('text')),
+              ),
             ),
           ),
         ],
