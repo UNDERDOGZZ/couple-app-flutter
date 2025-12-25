@@ -3,9 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-const String _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
-const String _supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
-const bool _hasSupabaseConfig =
+const String _supabaseUrl =
+String.fromEnvironment('SUPABASE_URL', defaultValue: '');
+
+const String _supabaseAnonKey =
+String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '');
+
+final bool _hasSupabaseConfig =
     _supabaseUrl.isNotEmpty && _supabaseAnonKey.isNotEmpty;
 
 Future<void> main() async {
@@ -595,7 +599,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Revisa tu correo para confirmar la cuenta.'),
+          content: Text('Cuenta creada exitosamente.'),
         ),
       );
       Navigator.of(context).pop();
