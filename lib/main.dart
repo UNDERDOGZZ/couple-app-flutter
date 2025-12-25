@@ -369,6 +369,17 @@ class _CoupleIllustration extends StatelessWidget {
   }
 }
 
+class _BlankScreen extends StatelessWidget {
+  const _BlankScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: SizedBox.expand(),
+    );
+  }
+}
+
 class _PersonAvatar extends StatelessWidget {
   const _PersonAvatar({
     required this.color,
