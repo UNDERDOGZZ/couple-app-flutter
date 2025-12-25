@@ -7,115 +7,323 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Parejas',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFE91E63)),
+        useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const WelcomeScreen(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class WelcomeScreen extends StatefulWidget {
+  const WelcomeScreen({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<WelcomeScreen> createState() => _WelcomeScreenState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _WelcomeScreenState extends State<WelcomeScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+    final size = MediaQuery.of(context).size;
+
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFFFFF1F5),
+              Color(0xFFFFE4E6),
+              Color(0xFFFCE7F3),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  children: const [
+                    SizedBox(height: 16),
+                    Text(
+                      'Momentos en Pareja',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF9F1239),
+                      ),
+                    ),
+                    SizedBox(height: 12),
+                    Text(
+                      'Guarda fechas especiales, recuerdos y crea contenido para compartir juntos.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Color(0xFF6B7280),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(
+                  height: size.height * 0.45,
+                  child: AnimatedBuilder(
+                    animation: _controller,
+                    builder: (context, child) {
+                      final float = 10 * _controller.value;
+                      final sway = 6 * (0.5 - (_controller.value - 0.5).abs());
+                      return Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Positioned(
+                            top: 20 + float,
+                            left: 30,
+                            child: _FloatingHeart(
+                              size: 36,
+                              opacity: 0.4,
+                              offset: Offset(0, sway),
+                            ),
+                          ),
+                          Positioned(
+                            top: 80,
+                            right: 40,
+                            child: _FloatingHeart(
+                              size: 24,
+                              opacity: 0.6,
+                              offset: Offset(0, -sway),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 40 + float,
+                            left: 40,
+                            child: _FloatingHeart(
+                              size: 28,
+                              opacity: 0.35,
+                              offset: Offset(0, -sway),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 20,
+                            right: 30,
+                            child: _FloatingHeart(
+                              size: 32,
+                              opacity: 0.45,
+                              offset: Offset(0, sway),
+                            ),
+                          ),
+                          Transform.translate(
+                            offset: Offset(0, -8 + float / 2),
+                            child: _CoupleIllustration(scale: 1 + float / 120),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+                Column(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (context) => const EmptyScreen(),
+                            ),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFE11D48),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        child: const Text('Iniciar'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Conecta tus recuerdos con amor',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF9CA3AF),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
+    );
+  }
+}
+
+class EmptyScreen extends StatelessWidget {
+  const EmptyScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: Text(
+            'Pantalla vacía',
+            style: TextStyle(
+              fontSize: 18,
+              color: Color(0xFF6B7280),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FloatingHeart extends StatelessWidget {
+  const _FloatingHeart({
+    required this.size,
+    required this.opacity,
+    required this.offset,
+  });
+
+  final double size;
+  final double opacity;
+  final Offset offset;
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform.translate(
+      offset: offset,
+      child: Icon(
+        Icons.favorite,
+        size: size,
+        color: const Color(0xFFF43F5E).withOpacity(opacity),
+      ),
+    );
+  }
+}
+
+class _CoupleIllustration extends StatelessWidget {
+  const _CoupleIllustration({required this.scale});
+
+  final double scale;
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform.scale(
+      scale: scale,
+      child: Container(
+        padding: const EdgeInsets.all(28),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.8),
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 24,
+              offset: const Offset(0, 16),
+            ),
+          ],
+        ),
+        child: Stack(
+          alignment: Alignment.center,
           children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+            Container(
+              width: 190,
+              height: 190,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFE4E6),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 6),
+              ),
+            ),
+            Positioned(
+              left: 24,
+              child: _PersonAvatar(
+                color: const Color(0xFFF97316),
+                icon: Icons.face,
+              ),
+            ),
+            Positioned(
+              right: 24,
+              child: _PersonAvatar(
+                color: const Color(0xFF38BDF8),
+                icon: Icons.face_2,
+              ),
+            ),
+            const Positioned(
+              bottom: 34,
+              child: Icon(
+                Icons.favorite,
+                size: 34,
+                color: Color(0xFFE11D48),
+              ),
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+    );
+  }
+}
+
+class _PersonAvatar extends StatelessWidget {
+  const _PersonAvatar({
+    required this.color,
+    required this.icon,
+  });
+
+  final Color color;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 80,
+      height: 80,
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 4),
+      ),
+      child: Icon(
+        icon,
+        size: 38,
+        color: color,
       ),
     );
   }
