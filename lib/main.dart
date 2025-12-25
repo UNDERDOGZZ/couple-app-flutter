@@ -45,6 +45,18 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     _controller.dispose();
     super.dispose();
   }
+}
+
+class _FloatingHeart extends StatelessWidget {
+  const _FloatingHeart({
+    required this.size,
+    required this.opacity,
+    required this.offset,
+  });
+
+  final double size;
+  final double opacity;
+  final Offset offset;
 
   @override
   Widget build(BuildContext context) {
@@ -153,9 +165,9 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (context) => const EmptyScreen(),
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Próximamente: inicio de sesión'),
                             ),
                           );
                         },
@@ -185,27 +197,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                   ],
                 ),
               ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class EmptyScreen extends StatelessWidget {
-  const EmptyScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: Text(
-            'Pantalla vacía',
-            style: TextStyle(
-              fontSize: 18,
-              color: Color(0xFF6B7280),
             ),
           ),
         ),
