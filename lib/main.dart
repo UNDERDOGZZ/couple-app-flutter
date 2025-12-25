@@ -153,9 +153,9 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Próximamente: inicio de sesión'),
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const _BlankScreen(),
                             ),
                           );
                         },
@@ -276,6 +276,17 @@ class _CoupleIllustration extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _BlankScreen extends StatelessWidget {
+  const _BlankScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: SizedBox.expand(),
     );
   }
 }
