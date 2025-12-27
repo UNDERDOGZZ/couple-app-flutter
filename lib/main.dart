@@ -4,10 +4,15 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-const String _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
-const String _supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
-const bool _hasSupabaseConfig =
+const String _supabaseUrl =
+String.fromEnvironment('SUPABASE_URL', defaultValue: '');
+
+const String _supabaseAnonKey =
+String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '');
+
+final bool _hasSupabaseConfig =
     _supabaseUrl.isNotEmpty && _supabaseAnonKey.isNotEmpty;
+
 
 /// Supabase data model (tables) for pareja:
 /// - couples
@@ -836,22 +841,29 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _generatePairingCode() async {
     if (_isLinked) return;
+
     final now = DateTime.now();
     if (_pairingExpiresAt != null && _pairingExpiresAt!.isAfter(now)) {
       return;
     }
-    setState(() {
-      _isSubmitting = true;
-    });
+
+    setState(() => _isSubmitting = true);
+
     try {
       final client = Supabase.instance.client;
       final user = client.auth.currentUser;
-      if (user == null) return;
+      if (user == null) {
+        debugPrint('⚠️ Usuario no autenticado');
+        return;
+      }
 
       final expiresAt = now.add(const Duration(minutes: 15));
       String? code;
+
       for (var i = 0; i < 3; i++) {
         final candidate = _createCode();
+        debugPrint('🔁 Intentando insertar código: $candidate');
+
         try {
           await client.from('pairing_codes').insert({
             'code': candidate,
@@ -859,32 +871,43 @@ class _HomeScreenState extends State<HomeScreen> {
             'expires_at': expiresAt.toIso8601String(),
             'used': false,
           });
+
           code = candidate;
+          debugPrint('✅ Código creado: $code');
           break;
-        } on PostgrestException catch (_) {
-          continue;
+        } on PostgrestException catch (e) {
+          debugPrint('❌ Error al insertar código');
+          debugPrint('message: ${e.message}');
+          debugPrint('details: ${e.details}');
+          debugPrint('hint: ${e.hint}');
+          debugPrint('code: ${e.code}');
         }
       }
+
       if (code == null) {
         throw Exception('No se pudo generar un código único.');
       }
+
       setState(() {
         _pairingCode = code;
         _pairingExpiresAt = expiresAt;
       });
-    } catch (_) {
+
+    } catch (e, st) {
+      debugPrint('🔥 Error general: $e');
+      debugPrint('📍 StackTrace: $st');
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No pudimos generar el código.')),
+        const SnackBar(content: Text("Error creando el código.")),
       );
     } finally {
       if (mounted) {
-        setState(() {
-          _isSubmitting = false;
-        });
+        setState(() => _isSubmitting = false);
       }
     }
   }
+
 
   Future<bool> _hasExistingCouple(String userId) async {
     final client = Supabase.instance.client;
